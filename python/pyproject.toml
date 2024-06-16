@@ -38,7 +38,8 @@ devel = [
     "sphinx-rtd-theme",
     "toml",
     "wheel",
-    "pytest-benchmark"
+    "pytest-benchmark",
+    "pytest-asyncio"
 ]
 pyspark = [
     "pyspark",
@@ -71,11 +72,7 @@ warn_return_any = false
 implicit_reexport = true
 strict_equality = true
 
-[tool.black]
-include = '\.pyi?$'
-exclude = "venv"
-
-[tool.ruff]
+[tool.ruff.lint]
 select = [
     # pycodestyle error
     "E",
@@ -86,7 +83,7 @@ select = [
 ]
 ignore = ["E501"]
 
-[tool.ruff.isort]
+[tool.ruff.lint.isort]
 known-first-party = ["deltalake"]
 
 [tool.pytest.ini_options]

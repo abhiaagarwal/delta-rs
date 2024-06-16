@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from typing import Any, Dict, List, Mapping, Optional
 
 import pyarrow as pa
@@ -98,8 +100,7 @@ class DeltaStorageHandler(FileSystemHandler):
         return self._handler.normalize_path(path)
 
     def open_input_file(self, path: str) -> pa.PythonFile:
-        """
-        Open an input file for random access reading.
+        """Open an input file for random access reading.
 
         Args:
             path: The source to open for reading.
@@ -110,8 +111,7 @@ class DeltaStorageHandler(FileSystemHandler):
         return pa.PythonFile(self._handler.open_input_file(path))
 
     def open_input_stream(self, path: str) -> pa.PythonFile:
-        """
-        Open an input stream for sequential reading.
+        """Open an input stream for sequential reading.
 
         Args:
             path: The source to open for reading.
@@ -124,8 +124,7 @@ class DeltaStorageHandler(FileSystemHandler):
     def open_output_stream(
         self, path: str, metadata: Optional[Dict[str, str]] = None
     ) -> pa.PythonFile:
-        """
-        Open an output stream for sequential writing.
+        """Open an output stream for sequential writing.
 
         If the target already exists, existing data is truncated.
 
@@ -139,8 +138,7 @@ class DeltaStorageHandler(FileSystemHandler):
         return pa.PythonFile(self._handler.open_output_stream(path, metadata))
 
     def get_file_info_selector(self, selector: FileSelector) -> List[FileInfo]:
-        """
-        Get info for the files defined by FileSelector.
+        """Get info for the files defined by FileSelector.
 
         Args:
             selector: FileSelector object

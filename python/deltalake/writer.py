@@ -37,7 +37,7 @@ import pyarrow.fs as pa_fs
 from pyarrow.lib import RecordBatchReader
 
 from ._internal import DeltaDataChecker as _DeltaDataChecker
-from ._internal import batch_distinct
+from ._internal import batch_distinct, write_to_deltalake_async
 from ._internal import convert_to_deltalake as _convert_to_deltalake
 from ._internal import (
     get_num_idx_cols_and_stats_columns as get_num_idx_cols_and_stats_columns,
@@ -89,7 +89,7 @@ def write_deltalake(
         pa.Table,
         pa.RecordBatch,
         Iterable[pa.RecordBatch],
-        RecordBatchReader,
+        pa.RecordBatchReader,
     ],
     *,
     schema: Optional[Union[pa.Schema, DeltaSchema]] = ...,
@@ -122,7 +122,7 @@ def write_deltalake(
         pa.Table,
         pa.RecordBatch,
         Iterable[pa.RecordBatch],
-        RecordBatchReader,
+        pa.RecordBatchReader,
     ],
     *,
     schema: Optional[Union[pa.Schema, DeltaSchema]] = ...,
@@ -149,7 +149,7 @@ def write_deltalake(
         pa.Table,
         pa.RecordBatch,
         Iterable[pa.RecordBatch],
-        RecordBatchReader,
+        pa.RecordBatchReader,
     ],
     *,
     schema: Optional[Union[pa.Schema, DeltaSchema]] = ...,
@@ -176,7 +176,7 @@ def write_deltalake(
         pa.Table,
         pa.RecordBatch,
         Iterable[pa.RecordBatch],
-        RecordBatchReader,
+        pa.RecordBatchReader,
     ],
     *,
     schema: Optional[Union[pa.Schema, DeltaSchema]] = None,
@@ -564,6 +564,125 @@ def write_deltalake(
             table.update_incremental()
     else:
         raise ValueError("Only `pyarrow` or `rust` are valid inputs for the engine.")
+
+
+async def write_deltalake_async(
+    table_or_uri: Union[str, Path, DeltaTable],
+    data: Union[
+        "pd.DataFrame",
+        ds.Dataset,
+        pa.Table,
+        pa.RecordBatch,
+        Iterable[pa.RecordBatch],
+        pa.RecordBatchReader,
+    ],
+    *,
+    schema: Optional[Union[pa.Schema, DeltaSchema]] = None,
+    partition_by: Optional[Union[List[str], str]] = None,
+    mode: Literal["error", "append", "overwrite", "ignore"] = "error",
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    configuration: Optional[Mapping[str, Optional[str]]] = None,
+    schema_mode: Optional[Literal["merge", "overwrite"]] = None,
+    storage_options: Optional[Dict[str, str]] = None,
+    predicate: Optional[str] = None,
+    large_dtypes: bool = False,
+    writer_properties: Optional[WriterProperties] = None,
+    custom_metadata: Optional[Dict[str, str]] = None,
+) -> None:
+    """Write to a Delta Lake table using asyncio.
+
+    If the table does not already exist, it will be created.
+
+    This only supports the `rust` engine, which is considered experimental.
+
+    To enable safe concurrent writes when writing to S3, an additional locking
+    mechanism must be supplied. For more information on enabling concurrent writing to S3, follow
+    [this guide](https://delta-io.github.io/delta-rs/usage/writing/writing-to-s3-with-locking-provider/)
+
+    Args:
+        table_or_uri: URI of a table or a DeltaTable object.
+        data: Data to write. If passing iterable, the schema must also be given.
+        schema: Optional schema to write.
+        partition_by: List of columns to partition the table by. Only required
+            when creating a new table.
+        mode: How to handle existing data. Default is to error if table already exists.
+            If 'append', will add new data.
+            If 'overwrite', will replace table with new data.
+            If 'ignore', will not write anything if table already exists.
+        name: User-provided identifier for this table.
+        description: User-provided description for this table.
+        configuration: A map containing configuration options for the metadata action.
+        schema_mode: If set to "overwrite", allows replacing the schema of the table. Set to "merge" to merge with existing schema.
+        storage_options: options passed to the native delta filesystem.
+        predicate: When using `Overwrite` mode, replace data that matches a predicate. Only used in rust engine.
+        partition_filters: the partition filters that will be used for partition overwrite. Only used in pyarrow engine.
+        large_dtypes: If True, the data schema is kept in large_dtypes, has no effect on pandas dataframe input.
+        writer_properties: Pass writer properties to the Rust parquet writer.
+        custom_metadata: Custom metadata to add to the commitInfo.
+    """
+    table, table_uri = try_get_table_and_table_uri(table_or_uri, storage_options)
+    if table is not None:
+        storage_options = table._storage_options or {}
+        storage_options.update(storage_options or {})
+        table.update_incremental()
+
+    __enforce_append_only(table=table, configuration=configuration, mode=mode)
+    if isinstance(partition_by, str):
+        partition_by = [partition_by]
+
+    if isinstance(schema, DeltaSchema):
+        schema = schema.to_pyarrow(as_large_types=True)
+
+    if isinstance(data, RecordBatchReader):
+        data = convert_pyarrow_recordbatchreader(data, large_dtypes)
+    elif isinstance(data, pa.RecordBatch):
+        data = convert_pyarrow_recordbatch(data, large_dtypes)
+    elif isinstance(data, pa.Table):
+        data = convert_pyarrow_table(data, large_dtypes)
+    elif isinstance(data, ds.Dataset):
+        data = convert_pyarrow_dataset(data, large_dtypes)
+    elif _has_pandas and isinstance(data, pd.DataFrame):
+        if schema is not None:
+            data = convert_pyarrow_table(
+                pa.Table.from_pandas(data, schema=schema), large_dtypes=large_dtypes
+            )
+        else:
+            data = convert_pyarrow_table(
+                pa.Table.from_pandas(data), large_dtypes=large_dtypes
+            )
+    elif isinstance(data, Iterable):
+        if schema is None:
+            raise ValueError("You must provide schema if data is Iterable")
+    else:
+        raise TypeError(
+            f"{type(data).__name__} is not a valid input. Only PyArrow RecordBatchReader, RecordBatch, Iterable[RecordBatch], Table, Dataset or Pandas DataFrame are valid inputs for source."
+        )
+
+    if schema is None:
+        schema = data.schema
+
+    if table is not None and mode == "ignore":
+        return
+
+    data = RecordBatchReader.from_batches(schema, (batch for batch in data))
+    await write_to_deltalake_async(
+        table_uri=table_uri,
+        data=data,
+        partition_by=partition_by,
+        mode=mode,
+        table=table._table if table is not None else None,
+        schema_mode=schema_mode,
+        predicate=predicate,
+        name=name,
+        description=description,
+        configuration=configuration,
+        storage_options=storage_options,
+        writer_properties=(writer_properties._to_dict() if writer_properties else None),
+        custom_metadata=custom_metadata,
+    )
+    if table:
+        table.update_incremental()
 
 
 def convert_to_deltalake(

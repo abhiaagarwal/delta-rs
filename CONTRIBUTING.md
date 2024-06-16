@@ -58,11 +58,11 @@ make build-docs
 
 *These are just some basic steps/components to get you started, there are many other very useful extensions for VSCode*
 
-- For a better Rust development experience, install [rust extention](https://marketplace.visualstudio.com/items?itemName=1YiB.rust-bundle)
+- For a better Rust development experience, install [rust extension](https://marketplace.visualstudio.com/items?itemName=1YiB.rust-bundle)
 - For debugging Rust code, install [CodeLLDB](https://marketplace.visualstudio.com/items?itemName=vadimcn.vscode-lldb). The extension should even create Debug launch configurations for the project if you allow it, an easy way to get started. Just set a breakpoint and run the relevant configuration.
 - For debugging from Python into Rust, follow this procedure:
 1. Add this to `.vscode/launch.json`
-```
+```json
 {
             "type": "lldb",
             "request": "attach",
@@ -83,6 +83,13 @@ make build-docs
 5. Run the following in that promt to get the Python process ID: `import os; os.getpid()`
 6. Run the `LLDB Attach to Python` from the `Run and Debug` panel of VSCode. This will prompt you for a Process ID to attach to, enter the Python process ID obtained earlier (this will also be in the dropdown but that dropdown will have many process IDs)
 7. LLDB make take couple of seconds to attach to the process
-8. When the debugger is attached to the process (you will notice the debugger panels get filled with extra info), enter `c`+Enter in the `PDB` prompt in your terminal - the execution should continue until the breakpoint in Rust code is hit. From this point it's a standard debugging procecess.
+8. When the debugger is attached to the process (you will notice the debugger panels get filled with extra info), enter `c`+Enter in the `PDB` prompt in your terminal - the execution should continue until the breakpoint in Rust code is hit. From this point it's a standard debugging process.
+- The various pyarrow libraries do not ship with fully-formed type stubs, which can confuse editor LSPs such as Pylance. Delta-rs includes minimal stubs for the libraries. To make Pylance recognize them, add to `.vscode/settings.json`:
 
+```json
+{
+    "python.analysis.stubPath": "python/stubs"
+}
+```
 
+- If using rust-analyzer, 

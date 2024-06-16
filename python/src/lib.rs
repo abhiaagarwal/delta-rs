@@ -44,6 +44,7 @@ use deltalake::operations::transaction::{
 };
 use deltalake::operations::update::UpdateBuilder;
 use deltalake::operations::vacuum::VacuumBuilder;
+use deltalake::operations::write::WriteBuilder;
 use deltalake::parquet::basic::Compression;
 use deltalake::parquet::errors::ParquetError;
 use deltalake::parquet::file::properties::WriterProperties;
@@ -1313,7 +1314,7 @@ fn set_writer_properties(
 }
 
 fn convert_partition_filters(
-    partitions_filters: Vec<(PyBackedStr, PyBackedStr, PartitionFilterValue)>,
+    partitions_filters: impl IntoIterator<Item = (PyBackedStr, PyBackedStr, PartitionFilterValue)>,
 ) -> Result<Vec<PartitionFilter>, DeltaTableError> {
     partitions_filters
         .into_iter()
@@ -1322,13 +1323,13 @@ fn convert_partition_filters(
                 let key: &'_ str = key.as_ref();
                 let op: &'_ str = op.as_ref();
                 let v: &'_ str = v.as_ref();
-                PartitionFilter::try_from((key, op, v))
+                (key, op, v).try_into()
             }
             (key, op, PartitionFilterValue::Multiple(v)) => {
                 let key: &'_ str = key.as_ref();
                 let op: &'_ str = op.as_ref();
                 let v: Vec<&'_ str> = v.iter().map(|v| v.as_ref()).collect();
-                PartitionFilter::try_from((key, op, v.as_slice()))
+                (key, op, v.as_slice()).try_into()
             }
         })
         .collect()
@@ -1589,10 +1590,10 @@ fn write_to_deltalake(
     custom_metadata: Option<HashMap<String, String>>,
 ) -> PyResult<()> {
     py.allow_threads(|| {
-        let batches = data.0.map(|batch| batch.unwrap()).collect::<Vec<_>>();
+        let batches = data.0.map(|batch| batch.unwrap());
         let save_mode = mode.parse().map_err(PythonError::from)?;
 
-        let options = storage_options.clone().unwrap_or_default();
+        let options = storage_options.unwrap_or_default();
         let table = if let Some(table) = table {
             DeltaOps(table._table.clone())
         } else {
@@ -1642,6 +1643,79 @@ fn write_to_deltalake(
         rt().block_on(builder.into_future())
             .map_err(PythonError::from)?;
 
+        Ok(())
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn write_to_deltalake_async<'py>(
+    py: Python<'py>,
+    table_uri: String,
+    data: PyArrowType<ArrowArrayStreamReader>,
+    mode: String,
+    table: Option<&RawDeltaTable>,
+    schema_mode: Option<String>,
+    partition_by: Option<Vec<String>>,
+    predicate: Option<String>,
+    name: Option<String>,
+    description: Option<String>,
+    configuration: Option<HashMap<String, Option<String>>>,
+    storage_options: Option<HashMap<String, String>>,
+    writer_properties: Option<HashMap<String, Option<String>>>,
+    custom_metadata: Option<HashMap<String, String>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let batches = data.0.map(|batch| batch.unwrap());
+    let save_mode = mode.parse().map_err(PythonError::from)?;
+
+    let options = storage_options.unwrap_or_default();
+    let table = table.map(|table| DeltaOps(table._table.clone()));
+
+    pyo3_asyncio_0_21::tokio::future_into_py(py, async move {
+        let table = match table {
+            Some(table) => table,
+            None => DeltaOps::try_from_uri_with_storage_options(&table_uri, options)
+                .await
+                .map_err(PythonError::from)?,
+        };
+
+        let mut builder = table.write(batches).with_save_mode(save_mode);
+        if let Some(schema_mode) = schema_mode {
+            builder = builder.with_schema_mode(schema_mode.parse().map_err(PythonError::from)?);
+        }
+        if let Some(partition_columns) = partition_by {
+            builder = builder.with_partition_columns(partition_columns);
+        }
+
+        if let Some(writer_props) = writer_properties {
+            builder = builder.with_writer_properties(
+                set_writer_properties(writer_props).map_err(PythonError::from)?,
+            );
+        }
+
+        if let Some(name) = &name {
+            builder = builder.with_table_name(name);
+        };
+
+        if let Some(description) = &description {
+            builder = builder.with_description(description);
+        };
+
+        if let Some(predicate) = predicate {
+            builder = builder.with_replace_where(predicate);
+        };
+
+        if let Some(config) = configuration {
+            builder = builder.with_configuration(config);
+        };
+
+        if let Some(metadata) = custom_metadata {
+            let json_metadata: Map<String, Value> =
+                metadata.into_iter().map(|(k, v)| (k, v.into())).collect();
+            builder = builder
+                .with_commit_properties(CommitProperties::default().with_metadata(json_metadata));
+        };
+        builder.into_future().await.map_err(PythonError::from)?;
         Ok(())
     })
 }
@@ -1698,6 +1772,60 @@ fn create_deltalake(
         rt().block_on(builder.into_future())
             .map_err(PythonError::from)?;
 
+        Ok(())
+    })
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn create_deltalake_async<'py>(
+    py: Python<'py>,
+    table_uri: String,
+    schema: PyArrowType<ArrowSchema>,
+    partition_by: Vec<String>,
+    mode: String,
+    raise_if_key_not_exists: bool,
+    name: Option<String>,
+    description: Option<String>,
+    configuration: Option<HashMap<String, Option<String>>>,
+    storage_options: Option<HashMap<String, String>>,
+    custom_metadata: Option<HashMap<String, String>>,
+) -> PyResult<Bound<'py, PyAny>> {
+    let table = DeltaTableBuilder::from_uri(table_uri)
+        .with_storage_options(storage_options.unwrap_or_default())
+        .build()
+        .map_err(PythonError::from)?;
+
+    let mode = mode.parse().map_err(PythonError::from)?;
+    let schema: StructType = (&schema.0).try_into().map_err(PythonError::from)?;
+
+    let mut builder = DeltaOps(table)
+        .create()
+        .with_columns(schema.fields().cloned())
+        .with_save_mode(mode)
+        .with_raise_if_key_not_exists(raise_if_key_not_exists)
+        .with_partition_columns(partition_by);
+
+    if let Some(name) = &name {
+        builder = builder.with_table_name(name);
+    };
+
+    if let Some(description) = &description {
+        builder = builder.with_comment(description);
+    };
+
+    if let Some(config) = configuration {
+        builder = builder.with_configuration(config);
+    };
+
+    if let Some(metadata) = custom_metadata {
+        let json_metadata: Map<String, Value> =
+            metadata.into_iter().map(|(k, v)| (k, v.into())).collect();
+        builder = builder.with_metadata(json_metadata);
+    };
+
+    pyo3_asyncio_0_21::tokio::future_into_py(py, async move {
+        builder.into_future().await.map_err(PythonError::from)?;
         Ok(())
     })
 }
@@ -1893,8 +2021,10 @@ fn _internal(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add_function(pyo3::wrap_pyfunction_bound!(rust_core_version, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(create_deltalake, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction_bound!(create_deltalake_async, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(write_new_deltalake, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(write_to_deltalake, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction_bound!(write_to_deltalake_async, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(convert_to_deltalake, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(batch_distinct, m)?)?;
     m.add_function(pyo3::wrap_pyfunction_bound!(

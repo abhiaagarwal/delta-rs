@@ -13,6 +13,11 @@ from deltalake.writer import AddAction
 
 __version__: str
 
+FilterLiteralType = Tuple[str, str, Any]
+FilterConjunctionType = List[FilterLiteralType]
+FilterDNFType = List[FilterConjunctionType]
+FilterType = Union[FilterConjunctionType, FilterDNFType]
+
 class RawDeltaTableMetaData:
     id: int
     name: str
@@ -23,7 +28,6 @@ class RawDeltaTableMetaData:
 
 class RawDeltaTable:
     schema: Any
-
     def __init__(
         self,
         table_uri: str,
@@ -199,6 +203,21 @@ def write_to_deltalake(
     writer_properties: Optional[Dict[str, Optional[str]]],
     custom_metadata: Optional[Dict[str, str]],
 ) -> None: ...
+async def write_to_deltalake_async(
+    table_uri: str,
+    data: pyarrow.RecordBatchReader,
+    partition_by: Optional[List[str]],
+    mode: str,
+    table: Optional[RawDeltaTable],
+    schema_mode: Optional[str],
+    predicate: Optional[str],
+    name: Optional[str],
+    description: Optional[str],
+    configuration: Optional[Mapping[str, Optional[str]]],
+    storage_options: Optional[Dict[str, str]],
+    writer_properties: Optional[Dict[str, Optional[str]]],
+    custom_metadata: Optional[Dict[str, str]],
+) -> None: ...
 def convert_to_deltalake(
     uri: str,
     partition_by: Optional[pyarrow.Schema],
@@ -263,7 +282,6 @@ class PrimitiveType:
     type: str
     """ The inner type
     """
-
     def to_json(self) -> str: ...
     @staticmethod
     def from_json(json: str) -> PrimitiveType:
@@ -327,7 +345,6 @@ class ArrayType:
     contains_null: bool
     """ Whether the arrays may contain null values
     """
-
     def to_json(self) -> str:
         """Get the JSON string representation of the type."""
     @staticmethod
@@ -419,7 +436,6 @@ class MapType:
     value_contains_null: bool
     """ Whether the values in a map may be null
     """
-
     def to_json(self) -> str:
         """Get JSON string representation of map type.
 
@@ -515,7 +531,6 @@ class Field:
     metadata: Dict[str, Any]
     """ The metadata of the field
     """
-
     def to_json(self) -> str:
         """Get the field as JSON string.
 
@@ -585,7 +600,6 @@ class StructType:
     fields: List[Field]
     """ The fields within the struct
     """
-
     def to_json(self) -> str:
         """Get the JSON representation of the type.
 
@@ -827,8 +841,3 @@ class SchemaMismatchError(DeltaError):
     """Raised when a schema mismatch is detected."""
 
     pass
-
-FilterLiteralType = Tuple[str, str, Any]
-FilterConjunctionType = List[FilterLiteralType]
-FilterDNFType = List[FilterConjunctionType]
-FilterType = Union[FilterConjunctionType, FilterDNFType]

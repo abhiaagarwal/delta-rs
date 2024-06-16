@@ -9,3 +9,4 @@ from .table import Metadata as Metadata
 from .table import WriterProperties as WriterProperties
 from .writer import convert_to_deltalake as convert_to_deltalake
 from .writer import write_deltalake as write_deltalake
+from .writer import write_deltalake_async as write_deltalake_async
