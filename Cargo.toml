@@ -110,3 +110,4 @@ debug = true
 [profile.profiling]
 inherits = "release"
 debug = true
+
