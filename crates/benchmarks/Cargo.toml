@@ -21,7 +21,7 @@ version = "0"
 features = ["datafusion"]
 
 [dev-dependencies]
-divan = "0.1"
+divan = { version = "4", package = "codspeed-divan-compat" }
 
 [[bench]]
 name = "merge"
