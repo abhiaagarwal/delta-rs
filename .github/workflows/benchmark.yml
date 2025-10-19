@@ -1,0 +1,58 @@
+name: python_benchmark
+
+# This is separate from the python_build so that it doesn't need to run on the merge group
+on:
+  push:
+    branches: [main]
+
+jobs:
+  python_benchmark:
+    name: Python Benchmark
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: "-C debuginfo=line-tables-only"
+    defaults:
+      run:
+        working-directory: ./python
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Build deltalake in release mode
+        run: |
+          MATURIN_EXTRA_ARGS=--release make develop
+
+      - name: Install dependencies
+        run: uv sync --group benchmark --group dev
+      
+      - name: Run python benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: instrumentation
+          run: uv run pytest tests/test_benchmark.py -m '(benchmark and pyarrow)' --codspeed
+          token: ${{ secrets.CODSPEED_TOKEN }}
+
+  rust_benchmark:
+    name: Rust Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-env
+
+      - name: Install cargo-codspeed
+        uses: taiki-e/install-action@cargo-codspeed
+
+      - name: Build benchmarks
+        run: cargo codspeed build
+
+      - name: Run rust benchmarks
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: instrumentation
+          run: cargo codspeed run
+          token: ${{ secrets.CODSPEED_TOKEN }}
