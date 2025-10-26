@@ -16,8 +16,8 @@ use object_store::path::Path;
 use object_store::ObjectMeta;
 use percent_encoding::percent_decode_str;
 
-use crate::kernel::scalars::ScalarExt;
-use crate::kernel::{Add, DeletionVectorDescriptor, Remove};
+use crate::scalars::ScalarExt;
+use deltalake_protocol::{Add, DeletionVectorDescriptor, Remove};
 use crate::{DeltaResult, DeltaTableError};
 
 pub(crate) use self::scan_row::{scan_row_in_eval, ScanRowOutStream};

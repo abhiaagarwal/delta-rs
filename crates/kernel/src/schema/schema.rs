@@ -9,9 +9,15 @@ pub use delta_kernel::schema::{
 };
 use serde_json::Value;
 
-use crate::kernel::error::Error;
+use crate::error::KernelError as Error;
 use crate::schema::DataCheck;
-use crate::table::GeneratedColumn;
+
+// Placeholder for GeneratedColumn - will come from core
+#[derive(Debug, Clone)]
+pub struct GeneratedColumn {
+    pub name: String,
+    pub expression: String,
+}
 
 /// Type alias for a top level schema
 pub type Schema = StructType;

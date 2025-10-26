@@ -49,7 +49,7 @@ fn encode_partition_value(value: &str) -> String {
     utf8_percent_encode(value, RFC3986_PART).to_string()
 }
 
-use crate::NULL_PARTITION_VALUE_DATA_PATH;
+use crate::schema::partitions::NULL_PARTITION_VALUE_DATA_PATH;
 
 /// Auxiliary methods for dealing with kernel scalars
 pub trait ScalarExt: Sized {

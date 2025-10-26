@@ -43,11 +43,11 @@ use tokio::task::spawn_blocking;
 use tracing::Instrument;
 use url::Url;
 
-use super::{Action, CommitInfo, Metadata, Protocol};
-use crate::kernel::arrow::engine_ext::{kernel_to_arrow, ExpressionEvaluatorExt};
-use crate::kernel::{spawn_blocking_with_span, StructType, ARROW_HANDLER};
-use crate::logstore::{LogStore, LogStoreExt};
-use crate::{to_kernel_predicate, DeltaResult, DeltaTableConfig, DeltaTableError, PartitionFilter};
+use deltalake_protocol::{Action, CommitInfo, Metadata, Protocol};
+use crate::arrow::engine_ext::{kernel_to_arrow, ExpressionEvaluatorExt};
+use crate::{spawn_blocking_with_span, ARROW_HANDLER};
+use delta_kernel::schema::StructType;
+use crate::error::{KernelResult as DeltaResult, KernelError};
 
 pub use self::log_data::*;
 pub use iterators::*;

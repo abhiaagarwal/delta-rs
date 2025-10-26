@@ -9,7 +9,7 @@ use arrow_schema::{
 };
 use delta_kernel::schema::ColumnMetadataKey;
 
-use crate::kernel::{ArrayType, DataType as DeltaDataType, MapType, StructField, StructType};
+use delta_kernel::schema::{ArrayType, DataType as DeltaDataType, MapType, StructField, StructType};
 
 fn try_merge_metadata<T: std::cmp::PartialEq + Clone>(
     left: &mut HashMap<String, T>,

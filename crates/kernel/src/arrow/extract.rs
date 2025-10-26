@@ -5,7 +5,7 @@ use std::sync::Arc;
 use arrow_array::{Array, ListArray, MapArray, RecordBatch, StructArray};
 use arrow_schema::{ArrowError, DataType};
 
-use crate::{DeltaResult, DeltaTableError};
+use crate::error::{DeltaResult, KernelError};
 
 /// Trait to extract a column by name from a record batch or nested / complex array.
 pub(crate) trait ProvidesColumnByName {

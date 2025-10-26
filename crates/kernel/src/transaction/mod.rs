@@ -91,16 +91,57 @@ use delta_kernel::table_features::{ReaderFeature, WriterFeature};
 use serde::{Deserialize, Serialize};
 
 use self::conflict_checker::{TransactionInfo, WinningCommitSummary};
-use crate::errors::DeltaTableError;
-use crate::kernel::{Action, CommitInfo, EagerSnapshot, Metadata, Protocol, Transaction};
-use crate::logstore::ObjectStoreRef;
-use crate::logstore::{CommitOrBytes, LogStoreRef};
-use crate::operations::CustomExecuteHandler;
-use crate::protocol::DeltaOperation;
-use crate::protocol::{cleanup_expired_logs_for, create_checkpoint_for};
-use crate::table::config::TablePropertiesExt as _;
-use crate::table::state::DeltaTableState;
-use crate::{crate_version, DeltaResult};
+use crate::error::KernelError;
+use deltalake_protocol::{Action, CommitInfo, Metadata, Protocol, TransactionError as ProtocolTransactionError, Transaction};
+use crate::snapshot::EagerSnapshot;
+// TODO: These imports need to be resolved when integrating with deltalake-core
+// use crate::logstore::{CommitOrBytes, LogStoreRef};
+// use crate::operations::CustomExecuteHandler;
+// use crate::protocol::DeltaOperation;
+// use crate::protocol::{cleanup_expired_logs_for, create_checkpoint_for};
+// use crate::table::config::TablePropertiesExt as _;
+// use crate::table::state::DeltaTableState;
+
+// Placeholder types - will be properly imported from core
+pub type LogStoreRef = ();
+pub type CommitOrBytes = ();
+pub type DeltaTableState = ();
+
+// Placeholder trait - will be properly imported from core
+pub trait CustomExecuteHandler {}
+
+// Placeholder type - will come from core's protocol module
+#[derive(Debug, Clone)]
+pub enum DeltaOperation {
+    Write { mode: SaveMode },
+    Append { partitionBy: Vec<String> },
+    Update { predicate: Option<String> },
+    Delete { predicate: Option<String> },
+    Optimize { predicate: Option<String> },
+    Restore { version: Option<i64> },
+    FileSystemCheck,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum SaveMode {
+    Append,
+    Overwrite,
+}
+
+// Placeholder functions - will be properly imported from core
+pub async fn cleanup_expired_logs_for(_version: i64, _log_store: &LogStoreRef, _retention: i64) -> Result<i64, TransactionError> {
+    Ok(0)
+}
+
+pub async fn create_checkpoint_for(_version: u64, _log_store: &dyn std::any::Any, _operation_id: Option<uuid::Uuid>) -> Result<(), TransactionError> {
+    Ok(())
+}
+use crate::error::KernelResult as DeltaResult;
+
+// Placeholder for crate_version - will come from core
+pub fn crate_version() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
 
 pub use self::conflict_checker::CommitConflictError;
 pub use self::protocol::INSTANCE as PROTOCOL;

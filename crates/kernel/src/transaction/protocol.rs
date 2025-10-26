@@ -4,11 +4,16 @@ use std::sync::LazyLock;
 use delta_kernel::table_features::{ReaderFeature, WriterFeature};
 
 use super::{TableReference, TransactionError};
-use crate::kernel::{
-    contains_timestampntz, Action, EagerSnapshot, Protocol, ProtocolExt as _, Schema,
-};
-use crate::protocol::DeltaOperation;
-use crate::table::config::TablePropertiesExt as _;
+use deltalake_protocol::{Action, Protocol};
+use crate::snapshot::EagerSnapshot;
+use delta_kernel::schema::{StructType as Schema, StructField};
+use super::DeltaOperation;
+// use crate::table::config::TablePropertiesExt as _;
+
+// Helper function placeholder
+fn contains_timestampntz<'a>(_fields: impl Iterator<Item = &'a StructField>) -> bool {
+    false // TODO: Implement properly
+}
 
 static READER_V2: LazyLock<HashSet<ReaderFeature>> =
     LazyLock::new(|| HashSet::from_iter([ReaderFeature::ColumnMapping]));

@@ -4,14 +4,14 @@ use std::collections::HashSet;
 use delta_kernel::table_properties::IsolationLevel;
 
 use super::CommitInfo;
-#[cfg(feature = "datafusion")]
-use crate::delta_datafusion::DataFusionMixins;
-use crate::errors::DeltaResult;
-use crate::kernel::{Action, Add, LogDataHandler, Metadata, Protocol, Remove, Transaction};
-use crate::logstore::{get_actions, LogStore};
-use crate::protocol::DeltaOperation;
-use crate::table::config::TablePropertiesExt as _;
-use crate::DeltaTableError;
+// TODO: DataFusion integration will be handled in core
+// #[cfg(feature = "datafusion")]
+// use crate::delta_datafusion::DataFusionMixins;
+use crate::error::{KernelResult as DeltaResult, KernelError};
+use deltalake_protocol::{Action, Add, Metadata, Protocol, Remove, Transaction};
+// use crate::logstore::{get_actions, LogStore};
+use super::DeltaOperation;
+// use crate::table::config::TablePropertiesExt as _;
 
 #[cfg(feature = "datafusion")]
 use super::state::AddContainer;

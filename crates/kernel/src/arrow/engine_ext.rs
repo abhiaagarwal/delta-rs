@@ -21,8 +21,8 @@ use delta_kernel::snapshot::Snapshot;
 use delta_kernel::table_properties::{DataSkippingNumIndexedCols, TableProperties};
 use delta_kernel::{DeltaResult, ExpressionEvaluator, ExpressionRef};
 
-use crate::errors::{DeltaResult as DeltaResultLocal, DeltaTableError};
-use crate::kernel::SCAN_ROW_ARROW_SCHEMA;
+use crate::error::KernelResult as DeltaResultLocal;
+use crate::SCAN_ROW_ARROW_SCHEMA;
 
 /// [`ScanMetadata`] contains (1) a [`RecordBatch`] specifying data files to be scanned
 /// and (2) a vector of transforms (one transform per scan file) that must be applied to the data read

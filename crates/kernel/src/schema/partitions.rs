@@ -5,7 +5,7 @@ use delta_kernel::expressions::{Expression, JunctionPredicateOp, Predicate, Scal
 use delta_kernel::schema::StructType;
 use serde::{Serialize, Serializer};
 
-use crate::errors::{DeltaResult, DeltaTableError};
+use crate::error::{KernelResult as DeltaResult, KernelError};
 
 /// A special value used in Hive to represent the null partition in partitioned tables
 pub const NULL_PARTITION_VALUE_DATA_PATH: &str = "__HIVE_DEFAULT_PARTITION__";
