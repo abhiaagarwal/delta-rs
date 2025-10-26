@@ -8,8 +8,7 @@ use uuid::Uuid;
 
 use super::storage::{utils::commit_uri_from_version, ObjectStoreRef};
 use super::{CommitOrBytes, LogStore, LogStoreConfig};
-use crate::kernel::transaction::TransactionError;
-use crate::DeltaResult;
+use crate::{LogStoreResult, TransactionError};
 
 fn put_options() -> &'static PutOptions {
     static PUT_OPTS: OnceLock<PutOptions> = OnceLock::new();
@@ -58,7 +57,7 @@ impl LogStore for DefaultLogStore {
         "DefaultLogStore".into()
     }
 
-    async fn read_commit_entry(&self, version: i64) -> DeltaResult<Option<Bytes>> {
+    async fn read_commit_entry(&self, version: i64) -> LogStoreResult<Option<Bytes>> {
         super::read_commit_entry(self.object_store(None).as_ref(), version).await
     }
 
@@ -107,7 +106,7 @@ impl LogStore for DefaultLogStore {
         }
     }
 
-    async fn get_latest_version(&self, current_version: i64) -> DeltaResult<i64> {
+    async fn get_latest_version(&self, current_version: i64) -> LogStoreResult<i64> {
         super::get_latest_version(self, current_version).await
     }
 

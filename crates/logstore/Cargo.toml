@@ -1,0 +1,53 @@
+[package]
+name = "deltalake-logstore"
+version = "0.29.2"
+authors.workspace = true
+keywords.workspace = true
+readme.workspace = true
+edition.workspace = true
+homepage.workspace = true
+description = "Delta Lake log store - transaction log management"
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+deltalake-protocol = { version = "0.29.2", path = "../protocol" }
+deltalake-derive = { version = "0.29.0", path = "../derive" }
+
+# Delta kernel
+delta_kernel.workspace = true
+
+# Object store
+object_store = { workspace = true }
+
+# Async runtime
+tokio = { workspace = true, features = ["macros", "rt", "sync"] }
+futures = { workspace = true }
+async-trait = { workspace = true }
+
+# Serialization
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Tracing
+tracing = { workspace = true }
+
+# Utilities
+bytes = { workspace = true }
+regex = { workspace = true }
+uuid = { workspace = true }
+url = { workspace = true }
+percent-encoding-rfc3986 = { workspace = true }
+dashmap = "6"
+chrono = { workspace = true }
+
+# Optional datafusion support
+datafusion = { workspace = true, optional = true }
+
+[features]
+datafusion = ["dep:datafusion"]
+

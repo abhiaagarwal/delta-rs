@@ -73,9 +73,11 @@ use tracing::*;
 use url::Url;
 use uuid::Uuid;
 
-use crate::kernel::transaction::TransactionError;
-use crate::kernel::{spawn_blocking_with_span, Action};
-use crate::{DeltaResult, DeltaTableError};
+// Import from protocol crate
+pub use deltalake_protocol::{Action, TransactionError};
+
+pub mod error;
+pub use error::*;
 
 pub use self::config::StorageConfig;
 pub use self::factories::{
@@ -95,6 +97,27 @@ pub(crate) mod default_logstore;
 pub(crate) mod factories;
 pub(crate) mod storage;
 
+/// Spawn a blocking task with tracing context
+pub(crate) fn spawn_blocking_with_span<F, R>(f: F) -> tokio::task::JoinHandle<R>
+where
+    F: FnOnce() -> R + Send + 'static,
+    R: Send + 'static,
+{
+    use tracing::dispatcher;
+    use tracing::Span;
+
+    // Capture the current dispatcher and span
+    let dispatch = dispatcher::get_default(|d| d.clone());
+    let span = Span::current();
+
+    tokio::task::spawn_blocking(move || {
+        dispatcher::with_default(&dispatch, || {
+            let _enter = span.enter();
+            f()
+        })
+    })
+}
+
 /// Internal trait to handle object store configuration and initialization.
 trait LogStoreFactoryExt {
     /// Create a new log store with the given options.
@@ -110,7 +133,7 @@ trait LogStoreFactoryExt {
         root_store: ObjectStoreRef,
         location: &Url,
         options: &StorageConfig,
-    ) -> DeltaResult<LogStoreRef>;
+    ) -> LogStoreResult<LogStoreRef>;
 }
 
 impl<T: LogStoreFactory + ?Sized> LogStoreFactoryExt for T {
@@ -119,7 +142,7 @@ impl<T: LogStoreFactory + ?Sized> LogStoreFactoryExt for T {
         root_store: ObjectStoreRef,
         location: &Url,
         options: &StorageConfig,
-    ) -> DeltaResult<LogStoreRef> {
+    ) -> LogStoreResult<LogStoreRef> {
         let prefixed_store = options.decorate_store(root_store.clone(), location)?;
         let log_store =
             self.with_options(Arc::new(prefixed_store), root_store, location, options)?;
@@ -133,7 +156,7 @@ impl<T: LogStoreFactory> LogStoreFactoryExt for Arc<T> {
         root_store: ObjectStoreRef,
         location: &Url,
         options: &StorageConfig,
-    ) -> DeltaResult<LogStoreRef> {
+    ) -> LogStoreResult<LogStoreRef> {
         T::with_options_internal(self, root_store, location, options)
     }
 }
@@ -175,10 +198,10 @@ pub(crate) static DELTA_LOG_REGEX: LazyLock<Regex> =
 /// let storage_config = StorageConfig::default();
 /// let logstore = logstore_for(location, storage_config).expect("Failed to get a logstore");
 /// ```
-pub fn logstore_for(location: Url, storage_config: StorageConfig) -> DeltaResult<LogStoreRef> {
+pub fn logstore_for(location: Url, storage_config: StorageConfig) -> LogStoreResult<LogStoreRef> {
     // turn location into scheme
     let scheme = Url::parse(&format!("{}://", location.scheme()))
-        .map_err(|_| DeltaTableError::InvalidTableLocation(location.clone().into()))?;
+        .map_err(|_| LogStoreError::InvalidTableLocation(location.clone().into()))?;
 
     if let Some(entry) = object_store_factories().get(&scheme) {
         debug!("Found a storage provider for {scheme} ({location})");
@@ -186,7 +209,7 @@ pub fn logstore_for(location: Url, storage_config: StorageConfig) -> DeltaResult
         return logstore_with(root_store, location, storage_config);
     }
 
-    Err(DeltaTableError::InvalidTableLocation(location.into()))
+    Err(LogStoreError::InvalidTableLocation(location.into()))
 }
 
 /// Return the [LogStoreRef] using the given [ObjectStoreRef]
@@ -194,9 +217,9 @@ pub fn logstore_with(
     root_store: ObjectStoreRef,
     location: Url,
     storage_config: StorageConfig,
-) -> DeltaResult<LogStoreRef> {
+) -> LogStoreResult<LogStoreRef> {
     let scheme = Url::parse(&format!("{}://", location.scheme()))
-        .map_err(|_| DeltaTableError::InvalidTableLocation(location.clone().into()))?;
+        .map_err(|_| LogStoreError::InvalidTableLocation(location.clone().into()))?;
 
     if let Some(factory) = logstore_factories().get(&scheme) {
         debug!("Found a logstore provider for {scheme}");
@@ -206,7 +229,7 @@ pub fn logstore_with(
     }
 
     error!("Could not find a logstore for the scheme {scheme}");
-    Err(DeltaTableError::InvalidTableLocation(
+    Err(LogStoreError::InvalidTableLocation(
         location.clone().into(),
     ))
 }
@@ -244,7 +267,7 @@ impl LogStoreConfig {
         &self,
         store: T,
         table_root: Option<&url::Url>,
-    ) -> DeltaResult<Box<dyn ObjectStore>> {
+    ) -> LogStoreResult<Box<dyn ObjectStore>> {
         let table_url = table_root.unwrap_or(&self.location);
         self.options.decorate_store(store, table_url)
     }
@@ -270,12 +293,12 @@ pub trait LogStore: Send + Sync + AsAny {
     fn name(&self) -> String;
 
     /// Trigger sync operation on log store to.
-    async fn refresh(&self) -> DeltaResult<()> {
+    async fn refresh(&self) -> LogStoreResult<()> {
         Ok(())
     }
 
     /// Read data for commit entry with the given version.
-    async fn read_commit_entry(&self, version: i64) -> DeltaResult<Option<Bytes>>;
+    async fn read_commit_entry(&self, version: i64) -> LogStoreResult<Option<Bytes>>;
 
     /// Write list of actions as delta commit entry for given version.
     ///
@@ -297,10 +320,10 @@ pub trait LogStore: Send + Sync + AsAny {
     ) -> Result<(), TransactionError>;
 
     /// Find latest version currently stored in the delta log.
-    async fn get_latest_version(&self, start_version: i64) -> DeltaResult<i64>;
+    async fn get_latest_version(&self, start_version: i64) -> LogStoreResult<i64>;
 
     /// Get the list of actions for the next commit
-    async fn peek_next_commit(&self, current_version: i64) -> DeltaResult<PeekCommit> {
+    async fn peek_next_commit(&self, current_version: i64) -> LogStoreResult<PeekCommit> {
         let next_version = current_version + 1;
         let commit_log_bytes = match self.read_commit_entry(next_version).await {
             Ok(Some(bytes)) => Ok(bytes),
@@ -342,12 +365,12 @@ pub trait LogStore: Send + Sync + AsAny {
         since = "0.1.0",
         note = "DO NOT USE: Just a stop gap to support lakefs during kernel migration"
     )]
-    fn transaction_url(&self, _operation_id: Uuid, base: &Url) -> DeltaResult<Url> {
+    fn transaction_url(&self, _operation_id: Uuid, base: &Url) -> LogStoreResult<Url> {
         Ok(base.clone())
     }
 
     /// Check if the location is a delta table location
-    async fn is_delta_table_location(&self) -> DeltaResult<bool> {
+    async fn is_delta_table_location(&self) -> LogStoreResult<bool> {
         let object_store = self.object_store(None);
         let dummy_url = Url::parse("http://example.com").unwrap();
         let log_path = Path::from("_delta_log");
@@ -424,11 +447,11 @@ impl<T: LogStore + ?Sized> LogStore for Arc<T> {
         T::name(self)
     }
 
-    async fn refresh(&self) -> DeltaResult<()> {
+    async fn refresh(&self) -> LogStoreResult<()> {
         T::refresh(self).await
     }
 
-    async fn read_commit_entry(&self, version: i64) -> DeltaResult<Option<Bytes>> {
+    async fn read_commit_entry(&self, version: i64) -> LogStoreResult<Option<Bytes>> {
         T::read_commit_entry(self, version).await
     }
 
@@ -450,11 +473,11 @@ impl<T: LogStore + ?Sized> LogStore for Arc<T> {
         T::abort_commit_entry(self, version, commit_or_bytes, operation_id).await
     }
 
-    async fn get_latest_version(&self, start_version: i64) -> DeltaResult<i64> {
+    async fn get_latest_version(&self, start_version: i64) -> LogStoreResult<i64> {
         T::get_latest_version(self, start_version).await
     }
 
-    async fn peek_next_commit(&self, current_version: i64) -> DeltaResult<PeekCommit> {
+    async fn peek_next_commit(&self, current_version: i64) -> LogStoreResult<PeekCommit> {
         T::peek_next_commit(self, current_version).await
     }
 
@@ -482,7 +505,7 @@ impl<T: LogStore + ?Sized> LogStore for Arc<T> {
         T::log_path(self)
     }
 
-    async fn is_delta_table_location(&self) -> DeltaResult<bool> {
+    async fn is_delta_table_location(&self) -> LogStoreResult<bool> {
         T::is_delta_table_location(self).await
     }
 
@@ -525,7 +548,7 @@ fn object_store_url(location: &Url) -> ObjectStoreUrl {
 
 /// Parse the path from a URL accounting for special case witjh S3
 // TODO: find out why this is necessary
-pub(crate) fn object_store_path(table_root: &Url) -> DeltaResult<Path> {
+pub(crate) fn object_store_path(table_root: &Url) -> LogStoreResult<Path> {
     Ok(match ObjectStoreScheme::parse(table_root) {
         Ok((_, path)) => path,
         _ => Path::parse(table_root.path())?,
@@ -566,14 +589,14 @@ pub fn to_uri(root: &Url, location: &Path) -> String {
 pub fn get_actions(
     version: i64,
     commit_log_bytes: &bytes::Bytes,
-) -> Result<Vec<Action>, DeltaTableError> {
+) -> Result<Vec<Action>, LogStoreError> {
     debug!("parsing commit with version {version}...");
     Deserializer::from_slice(commit_log_bytes)
         .into_iter::<Action>()
         .map(|result| {
             result.map_err(|e| {
                 let line = format!("Error at line {}, column {}", e.line(), e.column());
-                DeltaTableError::InvalidJsonLog {
+                LogStoreError::InvalidJsonLog {
                     json_err: e,
                     line,
                     version,
@@ -649,7 +672,7 @@ pub fn extract_version_from_filename(name: &str) -> Option<i64> {
 pub async fn get_latest_version(
     log_store: &dyn LogStore,
     current_version: i64,
-) -> DeltaResult<i64> {
+) -> LogStoreResult<i64> {
     let current_version = if current_version < 0 {
         0
     } else {
@@ -663,14 +686,14 @@ pub async fn get_latest_version(
         LogSegment::for_table_changes(storage.as_ref(), log_root, current_version as u64, None)
     })
     .await
-    .map_err(|e| DeltaTableError::Generic(e.to_string()))?
+    .map_err(|e| LogStoreError::Generic(e.to_string()))?
     .map_err(|e| {
         if e.to_string()
             .contains(&format!("to have version {current_version}"))
         {
-            DeltaTableError::InvalidVersion(current_version)
+            LogStoreError::InvalidVersion(current_version)
         } else {
-            DeltaTableError::Generic(e.to_string())
+            LogStoreError::Generic(e.to_string())
         }
     })?;
 
@@ -682,7 +705,7 @@ pub async fn get_latest_version(
 pub async fn read_commit_entry(
     storage: &dyn ObjectStore,
     version: i64,
-) -> DeltaResult<Option<Bytes>> {
+) -> LogStoreResult<Option<Bytes>> {
     let commit_uri = commit_uri_from_version(version);
     match storage.get(&commit_uri).await {
         Ok(res) => {
@@ -937,7 +960,7 @@ pub(crate) mod tests {
 
     /// <https://github.com/delta-io/delta-rs/issues/3297>:w
     #[tokio::test]
-    async fn test_peek_with_invalid_json() -> DeltaResult<()> {
+    async fn test_peek_with_invalid_json() -> LogStoreResult<()> {
         use crate::logstore::object_store::memory::InMemory;
         let memory_store = Arc::new(InMemory::new());
         let log_path = Path::from("delta-table/_delta_log/00000000000000000001.json");
@@ -1008,7 +1031,7 @@ mod datafusion_tests {
         let result = get_actions(0, &malformed_json);
 
         match result {
-            Err(DeltaTableError::InvalidJsonLog {
+            Err(LogStoreError::InvalidJsonLog {
                 line,
                 version,
                 json_err,

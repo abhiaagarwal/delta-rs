@@ -5,7 +5,7 @@ use ::object_store::{Error, ObjectStore, PutPayload, PutResult, Result};
 use tracing::*;
 
 #[cfg(feature = "cloud")]
-use crate::logstore::config;
+use crate::config;
 
 impl<T: ObjectStore + ?Sized> ObjectStoreRetryExt for T {}
 

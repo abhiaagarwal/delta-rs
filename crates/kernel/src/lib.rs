@@ -10,16 +10,18 @@ use tracing::Span;
 
 pub mod arrow;
 pub mod error;
-pub mod models;
 pub mod scalars;
 pub mod schema;
 mod snapshot;
 pub mod transaction;
 
+// Re-export protocol types
+pub use deltalake_protocol as protocol;
+pub use deltalake_protocol::*;
+
 pub use arrow::engine_ext::StructDataExt;
 pub use delta_kernel::engine;
 pub use error::*;
-pub use models::*;
 pub use schema::*;
 pub use snapshot::*;
 

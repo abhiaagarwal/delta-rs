@@ -1,29 +1,27 @@
-//! Error types for Delta Lake operations.
+//! Error types for Delta Lake kernel operations.
 
 use super::DataType;
 
-/// A specialized [`Result`] type for Delta Lake operations.
-pub type DeltaResult<T, E = Error> = std::result::Result<T, E>;
+/// A specialized [`Result`] type for Delta Lake kernel operations.
+pub type KernelResult<T> = std::result::Result<T, KernelError>;
 
+/// Errors that can occur in the Delta Lake kernel
 #[derive(thiserror::Error, Debug)]
 #[allow(missing_docs)]
-pub enum Error {
+pub enum KernelError {
+    #[error("Protocol error: {0}")]
+    Protocol(#[from] deltalake_protocol::ProtocolError),
+
+    #[error("Delta kernel error: {0}")]
+    DeltaKernel(#[from] delta_kernel::error::Error),
+
     #[error("Arrow error: {0}")]
     Arrow(#[from] arrow_schema::ArrowError),
 
-    #[error("Generic delta kernel error: {0}")]
-    Generic(String),
-
-    #[error("Generic error: {source}")]
-    GenericError {
-        /// Source error
-        source: Box<dyn std::error::Error + Send + Sync + 'static>,
-    },
-
-    #[error("Arrow error: {0}")]
+    #[error("Parquet error: {0}")]
     Parquet(#[from] parquet::errors::ParquetError),
 
-    #[error("Error interacting with object store: {0}")]
+    #[error("Object store error: {0}")]
     ObjectStore(#[from] object_store::Error),
 
     #[error("File not found: {0}")]
@@ -35,7 +33,7 @@ pub enum Error {
     #[error("Expected column type: {0}")]
     UnexpectedColumnType(String),
 
-    #[error("Expected is missing: {0}")]
+    #[error("Expected data is missing: {0}")]
     MissingData(String),
 
     #[error("No table version found.")]
@@ -50,7 +48,7 @@ pub enum Error {
     #[error("Invalid url: {0}")]
     InvalidUrl(#[from] url::ParseError),
 
-    #[error("Invalid url: {0}")]
+    #[error("Invalid JSON: {0}")]
     MalformedJson(#[from] serde_json::Error),
 
     #[error("No table metadata found in delta log.")]
@@ -79,4 +77,17 @@ pub enum Error {
 
     #[error("Failed to parse value '{0}' as '{1}'")]
     Parse(String, DataType),
+
+    #[error("Generic kernel error: {0}")]
+    Generic(String),
+
+    #[error("Generic error: {source}")]
+    GenericError {
+        /// Source error
+        source: Box<dyn std::error::Error + Send + Sync + 'static>,
+    },
 }
+
+// Keep backwards compatibility aliases
+pub type DeltaResult<T> = KernelResult<T>;
+pub type Error = KernelError;

@@ -4,8 +4,7 @@ use chrono::DateTime;
 use object_store::path::Path;
 use object_store::ObjectMeta;
 
-use crate::errors::{DeltaResult, DeltaTableError};
-use crate::kernel::Add;
+use crate::{Add, LogStoreResult, LogStoreError};
 
 /// Return the uri of commit version.
 ///
@@ -21,19 +20,19 @@ pub fn commit_uri_from_version(version: i64) -> Path {
 }
 
 impl TryFrom<Add> for ObjectMeta {
-    type Error = DeltaTableError;
+    type Error = LogStoreError;
 
-    fn try_from(value: Add) -> DeltaResult<Self> {
+    fn try_from(value: Add) -> LogStoreResult<Self> {
         (&value).try_into()
     }
 }
 
 impl TryFrom<&Add> for ObjectMeta {
-    type Error = DeltaTableError;
+    type Error = LogStoreError;
 
-    fn try_from(value: &Add) -> DeltaResult<Self> {
+    fn try_from(value: &Add) -> LogStoreResult<Self> {
         let last_modified = DateTime::from_timestamp_millis(value.modification_time).ok_or(
-            DeltaTableError::MetadataError(format!(
+            LogStoreError::MetadataError(format!(
                 "invalid modification_time: {:?}",
                 value.modification_time
             )),

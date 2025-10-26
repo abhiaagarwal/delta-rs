@@ -7,7 +7,7 @@ use object_store::path::Path;
 use object_store::{DynObjectStore, ObjectStore};
 use url::Url;
 
-use crate::{DeltaResult, DeltaTableError};
+use crate::{LogStoreResult, LogStoreError};
 
 pub use retry_ext::ObjectStoreRetryExt;
 pub use runtime::{DeltaIOStorageBackend, IORuntime};
@@ -33,7 +33,7 @@ pub trait ObjectStoreRegistry: Send + Sync + std::fmt::Debug + 'static {
     /// If no [`ObjectStore`] found for the `url`, ad-hoc discovery may be executed depending on
     /// the `url` and [`ObjectStoreRegistry`] implementation. An [`ObjectStore`] may be lazily
     /// created and registered.
-    fn get_store(&self, url: &Url) -> DeltaResult<Arc<dyn ObjectStore>>;
+    fn get_store(&self, url: &Url) -> LogStoreResult<Arc<dyn ObjectStore>>;
 }
 
 /// The default [`ObjectStoreRegistry`]
@@ -80,12 +80,12 @@ impl ObjectStoreRegistry for DefaultObjectStoreRegistry {
         self.object_stores.insert(url.to_string(), store)
     }
 
-    fn get_store(&self, url: &Url) -> DeltaResult<Arc<dyn ObjectStore>> {
+    fn get_store(&self, url: &Url) -> LogStoreResult<Arc<dyn ObjectStore>> {
         self.object_stores
             .get(&url.to_string())
             .map(|o| Arc::clone(o.value()))
             .ok_or_else(|| {
-                DeltaTableError::generic(format!("No suitable object store found for '{url}'."))
+                LogStoreError::generic(format!("No suitable object store found for '{url}'."))
             })
     }
 }
